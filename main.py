@@ -79,7 +79,7 @@ def training(model,group_user):
         score = predictor(uv_g, h, ('user', 'rate', 'item'))
         score_neg = predictor(graph_neg, h, ('user', 'rate', 'item'))
 
-        bprloss = -(score - score_neg).sigmoid().log().sum()
+        bprloss = -(score - score_neg).sigmoid().log().mean()
         if args.num_aspects > 1:
             aspect_reg_loss = model.aspect_regular()
         else:
@@ -90,7 +90,7 @@ def training(model,group_user):
         group_score = predictor(graph_g_i, h2, ('group', 'rate', 'item'))
         group_graph_neg = construct_negative_graph(graph_g_i, ('group', 'rate', 'item'),device)
         group_neg_score = predictor(group_graph_neg, h2, ('group', 'rate', 'item'))
-        group_loss = -(group_score - group_neg_score).sigmoid().log().sum()
+        group_loss = -(group_score - group_neg_score).sigmoid().log().mean()
 
         loss = (1 - args.group_loss_reg) * bprloss + args.reg_coef * aspect_reg_loss + args.group_loss_reg * group_loss
         # loss = (1 - args.group_loss_reg) * bprloss +  args.group_loss_reg * group_loss
@@ -121,10 +121,10 @@ def training(model,group_user):
             group_score = predictor(graph_g_i_val, h2, ('group', 'rate', 'item'))
             group_graph_val_neg = construct_negative_graph(graph_g_i_val, ('group', 'rate', 'item'),device)
             group_neg_score = predictor(group_graph_val_neg, h2, ('group', 'rate', 'item'))
-            group_loss = -(group_score - group_neg_score).sigmoid().log().sum()
+            group_loss = -(group_score - group_neg_score).sigmoid().log().mean()
             # val_loss = (-(score - score_neg).sigmoid().log().sum())/val_length
             
-            bprloss = -(score - score_neg).sigmoid().log().sum()
+            bprloss = -(score - score_neg).sigmoid().log().mean()
             # aspect_reg_loss = model.aspect_regular()
             # val_loss = (1 - args.group_loss_reg) * bprloss +  args.group_loss_reg * group_loss
             val_loss = (1 - args.group_loss_reg) * bprloss + args.reg_coef * aspect_reg_loss + args.group_loss_reg * group_loss

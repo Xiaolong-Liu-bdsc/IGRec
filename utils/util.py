@@ -83,10 +83,14 @@ class Helper(object):
                 return math.log(2) / math.log(i+2)
         return 0
 
-    def test_model(self, model, u_i_train_dict,u_i_test_dict, K,uv_g,group_user):
+    def test_model(self, model, u_i_train_dict,u_i_test_dict, K,uv_g,group_user, target='user', g_i_graph=None):
         users = []
-        num_users = uv_g.nodes('user').shape[0]
+        if target == 'user':
+            num_users = uv_g.nodes('user').shape[0]
+        else:
+            num_users = g_i_graph.nodes('group').shape[0]
         num_items = uv_g.nodes('item').shape[0]
+        
         all_train = t.zeros(num_users,num_items)
         all_test = t.zeros(num_users,num_items)
         
@@ -103,11 +107,12 @@ class Helper(object):
 
 
         item_tensor = all_test[t.LongTensor(list(u_i_test_dict.keys()))]
-
         test_data = TensorDataset(t.LongTensor(users), item_tensor)    #(test_user, test_item_interactions)
         test_loader = DataLoader(test_data, batch_size=256,shuffle=True)
-        user_embed, item_embed = model(uv_g,group_user)
-
+        user_embed, item_embed, group_emb = model(uv_g,group_user)
+        if target == 'group':
+            user_embed = group_emb
+            item_embed = model.item_embedding
         metric_result = {}
         for k in K:
             metric_result[k] = [[],[],[]]  #0: HR, 1: Recall, 2:ndcg

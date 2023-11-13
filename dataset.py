@@ -4,42 +4,65 @@ import numpy as np
 import torch
 from torch.utils.data import TensorDataset, DataLoader
 from torch.utils import data
+import dgl
+from collections import defaultdict
 
 class GDataset(object):
-    def __init__(self, user_path, num_negatives):
+    def __init__(self, path,num_negatives):
     # def __init__(self, user_path, group_path, num_negatives):
         '''
         Constructor
         '''
+        self.data_size(path)
         self.num_negatives = num_negatives
         # user data
-        self.user_valRatings,self.u_i_val_dict,num_user_val, num_items_val = self.load_rating_file_as_list(user_path + "val_ui.txt")
-        self.user_testRatings, self.u_i_test_dict, num_user_test, num_items_test = self.load_rating_file_as_list(user_path + "test_ui.txt")
-        current_max_user = max(num_user_val,num_user_test)
-        current_max_item = max(num_items_val,num_items_test)
-        self.user_trainMatrix, self.u_i_train_dict = self.load_rating_file_as_matrix(user_path + "train_ui.txt", current_max_user, current_max_item)
-        self.num_users, self.num_items = self.user_trainMatrix.shape
+        self.user_valRatings,self.u_i_val_dict = self.load_rating_file_as_list(path + "val_ui.txt")
+        self.user_testRatings, self.u_i_test_dict= self.load_rating_file_as_list(path + "test_ui.txt")
+        self.user_trainMatrix, self.u_i_train_dict = self.load_rating_file_as_matrix(path + "train_ui.txt", 'user')
     
+        # group data
+        self.group_testRatings,self.g_i_test_dict = self.load_rating_file_as_list(path + "test_gi.txt")
+        self.group_valMatrix, self.g_i_val_dict = self.load_rating_file_as_matrix(path + "val_gi.txt", 'group')
+        self.group_trainMatrix, self.g_i_train_dict = self.load_rating_file_as_matrix(path + "train_gi.txt", 'group')
+        self.graph_g_i = self.integrate_group_item_dataset(self.group_trainMatrix)
+        self.graph_g_i_val = self.integrate_group_item_dataset(self.group_valMatrix)
+        # self.group_testNegatives = self.load_negative_file(group_path + "Negative.txt")
+    def data_size(self, path):
+        with open(path +'/data_size.txt') as f:
+            line = f.readline()
+            elements = line.split(' ')
+            self.num_users, self.num_items, self.num_groups = int(elements[0]), int(elements[1]),int(elements[2])
+        f.close()
+        
+    def integrate_group_item_dataset(self, matrix):
 
+        group, item = matrix.nonzero()
+        data_dict = dict()
+        data_dict[('group', 'rate', 'item')] = (group, item)
+        data_dict[('item', 'rated by', 'group')] = (item, group)
+        num_nodes_dict = {'group':self.num_groups, 'item':self.num_items}
+        graph = dgl.heterograph(data_dict, num_nodes_dict= num_nodes_dict)
+        ratings = torch.tensor([1.0 for i in range(len(group))])
+        graph.edges['rate'].data['y'] = ratings
+        graph.edges['rated by'].data['y'] = ratings
+        return graph
 
     def load_rating_file_as_list(self, filename):
         u_i_dict = {}
         ratingList = []
-        num_users, num_items = 0, 0
         with open(filename, "r") as f:
             line = f.readline()
             while line != None and line != "":
                 arr = line.split(" ")
                 user, item = int(arr[0]), int(arr[1])
-                num_users = max(num_users, user)
-                num_items = max(num_items, item)
+
                 if user not in u_i_dict:
                     u_i_dict[user] = [item]
                 else:
                     u_i_dict[user].append(item)
                 ratingList.append([user, item])
                 line = f.readline()
-        return ratingList, u_i_dict, num_users, num_items
+        return ratingList, u_i_dict
 
     def load_negative_file(self, filename):
         negativeList = []
@@ -54,24 +77,20 @@ class GDataset(object):
                 line = f.readline()
         return negativeList
 
-    def load_rating_file_as_matrix(self, filename, n_u, n_i):
+    def load_rating_file_as_matrix(self, filename, type):
         # Get number of users and items
-        num_users, num_items = 0, 0
         with open(filename, "r") as f:
             line = f.readline()
             while line != None and line != "":
                 arr = line.split(" ")
                 u, i = int(arr[0]), int(arr[1])
-                num_users = max(num_users, u)
-                num_items = max(num_items, i)
                 line = f.readline()
-        num_users = max(num_users, n_u)
-        num_items = max(num_items, n_i)
         # Construct matrix
-        mat = sp.dok_matrix((num_users+1, num_items+1), dtype=np.float32)
-        u_i_dict = {}
-        for i in range(num_users+1):
-            u_i_dict[i] = []
+        if type =='user':
+            mat = sp.dok_matrix((self.num_users, self.num_items), dtype=np.float32)
+        if type =='group':
+            mat = sp.dok_matrix((self.num_groups, self.num_items), dtype=np.float32)
+        u_i_dict = defaultdict(list)
 
         with open(filename, "r") as f:
             line = f.readline()
